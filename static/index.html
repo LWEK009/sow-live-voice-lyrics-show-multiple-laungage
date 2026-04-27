@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#06050a" />
+  <title>Sow Live — real-time voice</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Syne:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-deep: #040308;
+      --bg-mid: #0c0a12;
+      --accent: #e8c872;
+      --accent-dim: #9a7b3c;
+      --ice: #9cdbf0;
+      --text: #f7f4ff;
+      --muted: #9289a3;
+      --glass: rgba(255, 255, 255, 0.035);
+      --border: rgba(255, 255, 255, 0.09);
+      --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    * { box-sizing: border-box; }
+    html {
+      scroll-behavior: smooth;
+      color-scheme: dark;
+    }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: "Syne", system-ui, sans-serif;
+      background: var(--bg-deep);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+    /* Slow drifting light — fluid ambience */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -35%;
+      z-index: 0;
+      background:
+        radial-gradient(closest-side at 22% 18%, rgba(232, 200, 114, 0.11), transparent 55%),
+        radial-gradient(closest-side at 88% 12%, rgba(156, 219, 240, 0.09), transparent 50%),
+        radial-gradient(closest-side at 50% 100%, rgba(120, 90, 200, 0.06), transparent 45%);
+      animation: meshDrift 28s ease-in-out infinite alternate;
+      pointer-events: none;
+    }
+    @keyframes meshDrift {
+      0%   { transform: translate(0, 0) rotate(0deg) scale(1); }
+      100% { transform: translate(4%, 3%) rotate(4deg) scale(1.05); }
+    }
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background: linear-gradient(180deg, transparent 0%, rgba(4, 3, 8, 0.5) 100%);
+      pointer-events: none;
+    }
+    .wrap {
+      position: relative;
+      z-index: 1;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: clamp(1.35rem, 4.5vw, 2.75rem);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      gap: clamp(1.25rem, 3vw, 2rem);
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1.25rem;
+      animation: fadeUp 0.9s var(--ease-out) both;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .brand-mark {
+      width: 48px;
+      height: 48px;
+      border-radius: 16px;
+      background: conic-gradient(from 210deg, var(--accent), #5c4a26, var(--ice), var(--accent));
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.12) inset,
+        0 12px 40px rgba(232, 200, 114, 0.22);
+      animation: markGlow 5s ease-in-out infinite alternate;
+    }
+    @keyframes markGlow {
+      from { filter: brightness(1) saturate(1); }
+      to   { filter: brightness(1.08) saturate(1.15); }
+    }
+    .brand-text h1 {
+      margin: 0;
+      font-size: clamp(1.5rem, 4.2vw, 1.95rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.35rem 0.6rem;
+    }
+    .brand-text h1 .sow {
+      background: linear-gradient(115deg, #fff 0%, #c9c2d8 45%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .brand-text h1 .live {
+      background: linear-gradient(90deg, var(--ice), #fff, var(--accent));
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: shineText 4s linear infinite;
+    }
+    @keyframes shineText {
+      to { background-position: 200% center; }
+    }
+    .live-pill {
+      display: inline-block;
+      vertical-align: middle;
+      font-size: 0.58rem;
+      font-weight: 800;
+      letter-spacing: 0.22em;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      color: #ffb8c3;
+      background: rgba(255, 60, 90, 0.12);
+      max-width: 0;
+      opacity: 0;
+      padding: 0;
+      margin: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      transform: scale(0.92);
+      transition:
+        max-width 0.5s var(--ease-out),
+        opacity 0.4s ease,
+        padding 0.4s ease,
+        margin 0.4s ease,
+        border-color 0.35s ease,
+        transform 0.45s var(--ease-spring);
+    }
+    .live-pill.is-on {
+      max-width: 140px;
+      opacity: 1;
+      padding: 0.35rem 0.55rem;
+      margin-left: 0.35rem;
+      border-color: rgba(255, 100, 120, 0.45);
+      transform: scale(1);
+      animation: pillPulse 2s ease-in-out infinite;
+    }
+    @keyframes pillPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255, 100, 120, 0.25); }
+      50%      { box-shadow: 0 0 20px 2px rgba(255, 100, 120, 0.15); }
+    }
+    .brand-text p {
+      margin: 0.4rem 0 0;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+      max-width: 22rem;
+      line-height: 1.45;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      align-items: center;
+      animation: fadeUp 0.9s 0.08s var(--ease-out) both;
+    }
+    button {
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--glass);
+      color: var(--text);
+      padding: 0.62rem 1rem;
+      cursor: pointer;
+      backdrop-filter: blur(16px) saturate(1.2);
+      transition:
+        transform 0.25s var(--ease-spring),
+        border-color 0.3s ease,
+        box-shadow 0.35s ease,
+        background 0.3s ease;
+    }
+    button:hover:not(:disabled) {
+      border-color: rgba(232, 200, 114, 0.35);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.25);
+      transform: translateY(-1px);
+    }
+    button:active:not(:disabled) {
+      transform: translateY(0) scale(0.98);
+    }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+    button:focus-visible {
+      outline: 2px solid rgba(232, 200, 114, 0.55);
+      outline-offset: 3px;
+    }
+    /* Custom language menu — native <select> popups stay light on many Linux themes */
+    .lang-picker {
+      position: relative;
+      z-index: 40;
+    }
+    .lang-trigger {
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.65rem;
+      min-width: 11.5rem;
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: #14121c;
+      color: #f7f4ff;
+      padding: 0.62rem 0.85rem 0.62rem 1rem;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+      transition:
+        transform 0.25s var(--ease-spring),
+        border-color 0.25s ease,
+        box-shadow 0.3s ease,
+        background 0.25s ease;
+    }
+    .lang-trigger:hover {
+      border-color: rgba(232, 200, 114, 0.45);
+      background: #1a1724;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+      transform: translateY(-1px);
+    }
+    .lang-trigger[aria-expanded="true"] {
+      border-color: rgba(156, 219, 240, 0.5);
+      box-shadow: 0 0 0 1px rgba(156, 219, 240, 0.2), 0 12px 36px rgba(0, 0, 0, 0.45);
+    }
+    .lang-trigger:focus-visible {
+      outline: 2px solid rgba(232, 200, 114, 0.65);
+      outline-offset: 3px;
+    }
+    .lang-chevron {
+      font-size: 0.65rem;
+      opacity: 0.75;
+      transition: transform 0.3s var(--ease-out);
+    }
+    .lang-trigger[aria-expanded="true"] .lang-chevron {
+      transform: rotate(180deg);
+    }
+    .lang-list {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      margin: 0;
+      padding: 0.35rem;
+      list-style: none;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: #0f0d14;
+      box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.4) inset,
+        0 24px 48px rgba(0, 0, 0, 0.55);
+      max-height: min(70vh, 320px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    .lang-list[hidden] {
+      display: none !important;
+    }
+    .lang-list li { margin: 0; padding: 0; }
+    .lang-option {
+      display: block;
+      width: 100%;
+      text-align: left;
+      font-family: inherit;
+      font-size: 0.84rem;
+      font-weight: 600;
+      padding: 0.65rem 0.85rem;
+      margin: 0;
+      border: none;
+      border-radius: 10px;
+      background: transparent;
+      color: #e8e4f2;
+      cursor: pointer;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+    .lang-option:hover,
+    .lang-option:focus-visible {
+      background: rgba(232, 200, 114, 0.12);
+      color: #fff;
+    }
+    .lang-option.is-active {
+      background: rgba(156, 219, 240, 0.14);
+      color: #b8eefc;
+    }
+    button.primary {
+      background: linear-gradient(135deg, rgba(232, 200, 114, 0.22), rgba(156, 219, 240, 0.1));
+      border-color: rgba(232, 200, 114, 0.42);
+    }
+    button.danger {
+      border-color: rgba(255, 120, 130, 0.4);
+      color: #ffc8cd;
+    }
+    .card {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      border-radius: 24px;
+      border: 1px solid var(--border);
+      background: linear-gradient(
+        165deg,
+        rgba(255,255,255,0.07) 0%,
+        rgba(255,255,255,0.02) 42%,
+        rgba(0,0,0,0.15) 100%
+      );
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.06) inset,
+        0 32px 96px rgba(0,0,0,0.55);
+      overflow: hidden;
+      min-height: 340px;
+      animation: fadeUp 0.95s 0.12s var(--ease-out) both;
+      position: relative;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(
+        135deg,
+        rgba(232,200,114,0.35),
+        rgba(255,255,255,0.06) 40%,
+        rgba(156,219,240,0.25)
+      );
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+      opacity: 0.65;
+    }
+    .card-top {
+      position: relative;
+      z-index: 1;
+      padding: 1.1rem 1.35rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .status {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: transform 0.4s var(--ease-spring), background 0.35s ease, box-shadow 0.4s ease;
+    }
+    .dot.live {
+      background: #6af0b8;
+      box-shadow: 0 0 16px rgba(106, 240, 184, 0.75);
+      animation: dotPulse 1.5s ease-in-out infinite;
+    }
+    .dot.busy {
+      background: var(--accent);
+      box-shadow: 0 0 14px rgba(232, 200, 114, 0.45);
+      animation: dotPulse 0.9s ease-in-out infinite;
+    }
+    @keyframes dotPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50%      { transform: scale(0.88); opacity: 0.75; }
+    }
+    .lyrics {
+      position: relative;
+      z-index: 1;
+      flex: 1;
+      padding: 1.35rem 1.4rem 1rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      scroll-behavior: smooth;
+    }
+    .verse {
+      font-family: "Newsreader", Georgia, serif;
+      font-size: clamp(1.02rem, 2.6vw, 1.18rem);
+      line-height: 1.58;
+      color: rgba(247, 244, 255, 0.76);
+      margin: 0;
+      padding: 0.65rem 0 0.85rem;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      animation: verseIn 0.55s var(--ease-out) both;
+    }
+    @keyframes verseIn {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+        filter: blur(4px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+        filter: blur(0);
+      }
+    }
+    .verse:last-of-type { border-bottom: none; }
+    .current-wrap {
+      position: relative;
+      z-index: 1;
+      padding: 0 1.35rem 0.35rem;
+    }
+    .current-label {
+      font-size: 0.65rem;
+      font-weight: 800;
+      letter-spacing: 0.2em;
+      color: var(--accent-dim);
+      margin-bottom: 0.35rem;
+      opacity: 0.9;
+    }
+    .current {
+      font-family: "Newsreader", Georgia, serif;
+      font-size: clamp(1.5rem, 5vw, 2.15rem);
+      line-height: 1.42;
+      font-weight: 500;
+      margin: 0;
+      min-height: 3.1em;
+      color: var(--text);
+      transition: opacity 0.18s ease, transform 0.35s var(--ease-out);
+      text-shadow: 0 0 80px rgba(232, 200, 114, 0.12);
+    }
+    .current.is-tick {
+      opacity: 0.92;
+      transform: translateY(1px);
+    }
+    .hint {
+      position: relative;
+      z-index: 1;
+      font-size: 0.76rem;
+      font-weight: 500;
+      color: var(--muted);
+      padding: 0.5rem 1.35rem 1.35rem;
+      line-height: 1.55;
+    }
+    .site-footer {
+      text-align: center;
+      padding: 0.5rem 0 1.25rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      animation: fadeUp 1s 0.15s var(--ease-out) both;
+    }
+    .site-footer a {
+      color: var(--ice);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(156, 219, 240, 0.35);
+      transition: color 0.2s ease, border-color 0.2s ease;
+    }
+    .site-footer a:hover {
+      color: #fff;
+      border-bottom-color: rgba(255, 255, 255, 0.45);
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0,0,0,0);
+      border: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div class="brand-text">
+          <h1>
+            <span class="sow">Sow</span><span class="live">Live</span>
+            <span class="live-pill" id="livePill" aria-live="polite">LIVE</span>
+          </h1>
+          <p>Premium live transcription — your voice becomes text, instantly on this device.</p>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="lang-picker">
+          <span id="langPickerLabel" class="sr-only">Transcription language</span>
+          <button
+            type="button"
+            class="lang-trigger"
+            id="langTrigger"
+            aria-labelledby="langPickerLabel"
+            aria-haspopup="listbox"
+            aria-expanded="false"
+            aria-controls="langList"
+          >
+            <span id="langLabel">English</span>
+            <span class="lang-chevron" aria-hidden="true">▾</span>
+          </button>
+          <ul class="lang-list" id="langList" role="listbox" aria-labelledby="langPickerLabel" hidden>
+            <li role="none"><button type="button" class="lang-option" role="option" data-code="en">English</button></li>
+            <li role="none"><button type="button" class="lang-option" role="option" data-code="es">Spanish</button></li>
+            <li role="none"><button type="button" class="lang-option" role="option" data-code="zh">Chinese</button></li>
+            <li role="none"><button type="button" class="lang-option" role="option" data-code="ja">Japanese</button></li>
+            <li role="none"><button type="button" class="lang-option" role="option" data-code="ko">Korean</button></li>
+            <li role="none"><button type="button" class="lang-option" role="option" data-code="vi">Vietnamese</button></li>
+            <li role="none"><button type="button" class="lang-option" role="option" data-code="uk">Ukrainian</button></li>
+            <li role="none"><button type="button" class="lang-option" role="option" data-code="ar">Arabic</button></li>
+          </ul>
+        </div>
+        <button type="button" class="primary" id="btnStart">Start listening</button>
+        <button type="button" class="danger" id="btnStop" disabled>Stop</button>
+      </div>
+    </header>
+
+    <section class="card" aria-live="polite" aria-atomic="false">
+      <div class="card-top">
+        <div class="status">
+          <span class="dot" id="statusDot" aria-hidden="true"></span>
+          <span id="statusText">Idle — press Start and allow the microphone</span>
+        </div>
+      </div>
+      <div class="lyrics" id="verses"></div>
+      <div class="current-wrap">
+        <div class="current-label">NOW</div>
+        <p class="current" id="currentLine">&nbsp;</p>
+      </div>
+      <p class="hint">Speak naturally, then pause briefly so each phrase can close. On other hosts than <strong>127.0.0.1</strong>, use HTTPS so the browser allows the microphone.</p>
+    </section>
+
+    <footer class="site-footer">
+      <a href="https://github.com/LWEK009" target="_blank" rel="noopener noreferrer">github.com/LWEK009</a>
+    </footer>
+  </div>
+
+  <script>
+(function () {
+  const LANGS = [
+    { code: "en", label: "English" },
+    { code: "es", label: "Spanish" },
+    { code: "zh", label: "Chinese" },
+    { code: "ja", label: "Japanese" },
+    { code: "ko", label: "Korean" },
+    { code: "vi", label: "Vietnamese" },
+    { code: "uk", label: "Ukrainian" },
+    { code: "ar", label: "Arabic" },
+  ];
+  let currentLang = "en";
+  const langTrigger = document.getElementById("langTrigger");
+  const langLabel = document.getElementById("langLabel");
+  const langList = document.getElementById("langList");
+  const btnStart = document.getElementById("btnStart");
+  const btnStop = document.getElementById("btnStop");
+  const statusDot = document.getElementById("statusDot");
+  const statusText = document.getElementById("statusText");
+  const verses = document.getElementById("verses");
+  const currentLine = document.getElementById("currentLine");
+  const livePill = document.getElementById("livePill");
+
+  let ws = null;
+  let audioCtx = null;
+  let mediaStream = null;
+  let processor = null;
+  let sourceNode = null;
+  let ready = false;
+  let audioStarted = false;
+  let tickTimer = null;
+  /** @type {Map<string, string>} */
+  const lineTexts = new Map();
+
+  function langLabelFor(code) {
+    const row = LANGS.find((l) => l.code === code);
+    return row ? row.label : code;
+  }
+
+  function setLangMenuOpen(open) {
+    langList.hidden = !open;
+    langTrigger.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  function syncLangOptionsActive() {
+    langList.querySelectorAll(".lang-option").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.getAttribute("data-code") === currentLang);
+    });
+  }
+
+  langTrigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const open = langList.hidden;
+    setLangMenuOpen(open);
+    if (open) syncLangOptionsActive();
+  });
+
+  langList.querySelectorAll(".lang-option").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      currentLang = btn.getAttribute("data-code") || "en";
+      langLabel.textContent = langLabelFor(currentLang);
+      syncLangOptionsActive();
+      setLangMenuOpen(false);
+    });
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".lang-picker")) setLangMenuOpen(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") setLangMenuOpen(false);
+  });
+
+  syncLangOptionsActive();
+
+  function setLivePill(on) {
+    livePill.classList.toggle("is-on", !!on);
+  }
+
+  function setStatus(mode, text) {
+    statusText.textContent = text;
+    statusDot.className = "dot" + (mode === "live" ? " live" : mode === "busy" ? " busy" : "");
+    setLivePill(mode === "live");
+  }
+
+  function flashCurrentLine() {
+    currentLine.classList.add("is-tick");
+    clearTimeout(tickTimer);
+    tickTimer = setTimeout(() => currentLine.classList.remove("is-tick"), 140);
+  }
+
+  function connectWs(lang) {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const url = `${proto}//${location.host}/ws?lang=${encodeURIComponent(lang)}`;
+    return new WebSocket(url);
+  }
+
+  function packAudio(float32, sampleRate) {
+    const n = float32.length;
+    const out = new ArrayBuffer(8 + n * 4);
+    const dv = new DataView(out);
+    dv.setUint32(0, sampleRate >>> 0, true);
+    dv.setUint32(4, n >>> 0, true);
+    new Float32Array(out, 8, n).set(float32);
+    return out;
+  }
+
+  function appendVerse(text) {
+    if (!text || !text.trim()) return;
+    const p = document.createElement("p");
+    p.className = "verse";
+    p.textContent = text.trim();
+    verses.appendChild(p);
+    requestAnimationFrame(() => {
+      verses.scrollTo({ top: verses.scrollHeight, behavior: "smooth" });
+    });
+  }
+
+  btnStart.addEventListener("click", async () => {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+    ready = false;
+    audioStarted = false;
+    verses.innerHTML = "";
+    currentLine.textContent = "\u00a0";
+    lineTexts.clear();
+    setStatus("busy", "Connecting…");
+    btnStart.disabled = true;
+    setLivePill(false);
+
+    const lang = currentLang;
+    ws = connectWs(lang);
+
+    ws.binaryType = "arraybuffer";
+    ws.onmessage = (ev) => {
+      if (typeof ev.data !== "string") return;
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+      if (msg.type === "status") {
+        if (msg.message === "ready") {
+          ready = true;
+          setStatus("live", "Listening — speak now");
+          if (audioStarted) return;
+          audioStarted = true;
+          startAudioPipeline().catch((e) => {
+            audioStarted = false;
+            setStatus("", "Audio error: " + (e && e.message ? e.message : e));
+            setLivePill(false);
+            stopAll();
+          });
+        } else if (msg.message === "loading_model") {
+          setStatus("busy", "Loading model (first time may take a minute)…");
+        }
+      } else if (msg.type === "partial") {
+        lineTexts.set(msg.lineId, msg.text || "");
+        flashCurrentLine();
+        currentLine.textContent = msg.text && msg.text.trim() ? msg.text : "\u00a0";
+      } else if (msg.type === "final") {
+        const t = (msg.text || "").trim();
+        if (t) appendVerse(t);
+        currentLine.textContent = "\u00a0";
+        lineTexts.delete(msg.lineId);
+      } else if (msg.type === "line_started") {
+        currentLine.textContent = "\u00a0";
+      }
+    };
+
+    ws.onerror = () => {
+      setStatus("", "WebSocket error — is the server running?");
+      setLivePill(false);
+      btnStart.disabled = false;
+    };
+    ws.onclose = () => {
+      ready = false;
+      setLivePill(false);
+      btnStart.disabled = false;
+      btnStop.disabled = true;
+      if (statusText.textContent.includes("Listening")) {
+        setStatus("", "Disconnected");
+      }
+    };
+
+    ws.onopen = () => {
+      btnStop.disabled = false;
+    };
+  });
+
+  async function startAudioPipeline() {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      video: false,
+    });
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") await audioCtx.resume();
+    const sampleRate = audioCtx.sampleRate;
+    sourceNode = audioCtx.createMediaStreamSource(mediaStream);
+    const bufferSize = 4096;
+    processor = audioCtx.createScriptProcessor(bufferSize, 1, 1);
+    processor.onaudioprocess = (e) => {
+      if (!ready || !ws || ws.readyState !== WebSocket.OPEN) return;
+      const input = e.inputBuffer.getChannelData(0);
+      const copy = new Float32Array(input.length);
+      copy.set(input);
+      ws.send(packAudio(copy, sampleRate));
+    };
+    sourceNode.connect(processor);
+    const silent = audioCtx.createGain();
+    silent.gain.value = 0;
+    processor.connect(silent);
+    silent.connect(audioCtx.destination);
+  }
+
+  function stopAll() {
+    ready = false;
+    audioStarted = false;
+    setLivePill(false);
+    try {
+      if (processor) {
+        processor.disconnect();
+        processor.onaudioprocess = null;
+      }
+    } catch (_) {}
+    try { if (sourceNode) sourceNode.disconnect(); } catch (_) {}
+    try { if (audioCtx) audioCtx.close(); } catch (_) {}
+    processor = null;
+    sourceNode = null;
+    audioCtx = null;
+    if (mediaStream) {
+      mediaStream.getTracks().forEach((t) => t.stop());
+      mediaStream = null;
+    }
+    if (ws) {
+      try { ws.close(); } catch (_) {}
+      ws = null;
+    }
+    setStatus("", "Stopped");
+    btnStart.disabled = false;
+    btnStop.disabled = true;
+  }
+
+  btnStop.addEventListener("click", stopAll);
+})();
+  </script>
+</body>
+</html>
